@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sistema de Vigilancia</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .video-analysis-container {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .video-container, .description-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .video-box, .description-panel {
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .description-panel {
+            min-height: 400px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+        }
+        select, button, input {
+            padding: 8px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.stop {
+            background-color: #f44336;
+        }
+        button.stop:hover {
+            background-color: #d32f2f;
+        }
+        img {
+            width: 100%;
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .status.active {
+            color: #4CAF50;
+        }
+        .status.inactive {
+            color: #f44336;
+        }
+        #uploadForm {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        /* Responsive design for smaller screens */
+        @media (max-width: 768px) {
+            .video-analysis-container {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sistema de Vigilancia</h1>
+        
+        <div class="controls">
+            <h2>Subir y Analizar Video</h2>
+            
+            <form id="uploadForm" enctype="multipart/form-data">
+                <input type="file" id="videoFile" name="video" accept=".mp4,.avi,.mov,.mkv">
+                <button type="submit">Subir Video</button>
+            </form>
+            
+            <div id="uploadStatus"></div>
+            
+            <div class="buttons" style="margin-top: 15px;">
+                <button id="startBtn" onclick="startVideo()">Iniciar Análisis</button>
+                <button id="stopBtn" class="stop" onclick="stopVideo()">Detener Análisis</button>
+            </div>
+            
+            <div class="status" id="processingStatus">
+                Estado: <span id="statusText" class="inactive">Inactivo</span>
+            </div>
+        </div>
+        
+        <div class="video-analysis-container">
+            <div class="video-container">
+                <h2>Video</h2>
+                <div class="video-box">
+                    <img src="{{ url_for('video_feed') }}" alt="Video">
+                </div>
+            </div>
+            
+            <div class="description-container">
+                <h2>Análisis</h2>
+                <div class="description-panel">
+                    <div id="description">Esperando análisis...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('videoFile');
+            if (fileInput.files.length === 0) {
+                alert('Por favor selecciona un archivo de video');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('video', fileInput.files[0]);
+            
+            const statusDiv = document.getElementById('uploadStatus');
+            statusDiv.textContent = 'Subiendo video...';
+            
+            fetch('/upload_video', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    statusDiv.textContent = 'Video subido con éxito: ' + data.filename;
+                } else {
+                    statusDiv.textContent = 'Error: ' + data.error;
+                }
+            })
+            .catch(error => {
+                statusDiv.textContent = 'Error en la subida: ' + error;
+                console.error('Error:', error);
+            });
+        });
+        
+        function startVideo() {
+            fetch('/start_video', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('statusText').textContent = 'Analizando';
+                    document.getElementById('statusText').className = 'active';
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al iniciar el análisis');
+            });
+        }
+        
+        function stopVideo() {
+            fetch('/stop_video', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('statusText').textContent = 'Inactivo';
+                document.getElementById('statusText').className = 'inactive';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+        
+        setInterval(() => {
+            fetch('/get_latest_description')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('description').innerText = data.description;
+                
+                if (data.is_processing) {
+                    document.getElementById('statusText').textContent = 'Analizando';
+                    document.getElementById('statusText').className = 'active';
+                } else {
+                    document.getElementById('statusText').textContent = 'Inactivo';
+                    document.getElementById('statusText').className = 'inactive';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching description:', error);
+            });
+        }, 2000);
+    </script>
+</body>
+</html>
